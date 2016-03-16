@@ -1,0 +1,56 @@
+BIP: <BIP number>
+Title: Expiration times in transactions
+Author: Bram Cohen <bram@bittorrent.com>
+Status: Draft
+Type: Standards Track
+Created: 2016-03-14
+
+Abstract
+
+When Bitcoin is processing transactions at the transaction rate limit a market for fees must emerge such that some transactions succeed because they have sufficient fees and others fail because of insufficient fees. Currently there's no good way for failed transactions to truly fail, so they wind up in a limbo state where they might go through at a later time even though both the sender and recipient have agreed they should no longer happen. This BIP adds an optional transaction expiration time to fix this problem.
+
+Copyright
+
+This document is in the public domain
+
+Specification
+
+WRITEME
+
+Motivation
+
+Currently the only way for a transaction to be rendered permanently invalid is for one of its inputs to be spent on another transaction. This works well for some high value transactions but fails for the case where the reason for the transaction failure was that the fee which the sender was willing to spend was too low. In that case spending the input to a new output would require another transaction which would cost the same fee as was too high in the first place, and wouldn't even benefit from whatever value the original transaction had in the first place. Assuming that the failed transaction will never go through is invalid, because fees are likely to have very strong day/night and weekly cycles and it may be a common occurence for a transaction to automatically go through at a much later time when fees have become much smaller. The natural way of fixing this is to add a mirror to N_TIMELOCKVERIFY which specifies a maximum instead of a minimum block height for the transaction.
+
+Rationale
+
+Despite its simplicity, this proposal needs to be justified on a number of different levels. It needs to be justified as fixing a real pressing problem. It needs to be justified as being able to be used safely and with low transaction processing time while accounting for the possibility of history reorganizations. And it needs to be shown that that approach can be implemented performantly and without any more blockchain extensions (it will call for an extension to SPV).
+
+But first the mundane technical details of the proposal should be addressed. In terms of a maximum time there are only two options to go off of, wall clock time and block height. Block height is selected because it serves and a reasonable proxy for wall clock time and it maintains consistency with N_LOCKTIMEVERIFY. Also the security guarantees on wall clock time are weak and vague, while the guarantees on block height are strong and well specified.
+
+WRITEME details of how it's made possible by segwit and works with that go here
+
+The most controversial part of this proposal is whether it fixes a problem which should be fixed at all, because currently most blocks aren't full and there are proposals to attempt raise the block size enough to keep them from ever getting full. Some people have even implied that developing solutions which allow a fee market to emerge when necessary might be bad because it might disincentivize those changes from happening.
+
+The most compelling reason to enable a working market in transaction fees is that without any serious changes Bitcoin's momentum is taking it there quickly. The transaction rate has been going up over time, and the block size limit is set to not change. There are proposals to increase the block size limit, but they require a hard fork and are themselves very controversial and may take a long time to happen, if ever. The serious hard fork limit proposals increase the limit by an amount which reduces but doesn't nearly eliminate the possibility of blocks being routinely full. The risks are highly asymmetric: For blocks become routinely full before the ecosystem is ready to handle it would be a disaster. If the ecosystem gets ready for the need for a fee market for transactions well in advance of it being necessary then nothing bad happens.
+
+No matter how big the block size limit is, it is likely that some applications will 'abuse' Bitcoin by creating a large number of semantically valid but low value transactions because they of no disincentive from doing so (as a DOS attack if nothing else), and a fee market will have to get established, albeit with much lower fees, to keep that under control. The arguments for a transaction expiration time apply just as strongly in these scenarios as they do for cases where blocks are getting filled with direct user to user transactions.
+
+In the long run the need for real transaction fees is baked into the design of Bitcoin. As mining rewards drop to nothing they need to be replaced with transaction fees in order for Bitcoin to have any security at all. Even if the block size limit has been increased to more than the demand for transactions, there will be overwhelming incentive for miners to create a soft fork to limit the block size enough to create real transaction fees, and it is prudent to assume that this will happen and prepare the rest of the ecosystem to be able to handle a transaction fee market.
+
+While waiting for some number of blocks to pass after a transaction has been committed before accepting it is prudent, an extra level of precaution should be taken for transactions which have high potential in a history reorganization to become not only not committed, but permanently not committable. All transactions have the potential to have this happen if there's a conflicting double-spend, but in practice when there have been even very deep reorganizations the overwhelming majority of historical transactions got recommitted to the new history. The big exception to this is mining rewards, which have the rule that they can't be spent until 100 blocks have passed after they're granted. Taken together, these existing precendents suggest that an acceptable approach to handling transactions with expiration times is to accept them after a normal number of blocks if they're committed more than 100 blocks before their expiration time, and otherwise require 100 blocks before accepting them. This might be excessively conservative, but client behavior can always be changed later and the requirement now is to demonstrate that a reasonable strategy is possible.
+
+Assuming this 100 blocks rule, when a sender wishes for a transaction to have a failure time they should take the block number they wish to use as the failure point, add 100 to it, and use that as their expiration time. That way in the normal case the transaction can be accepted quickly, while in the failure case the transaction is in an undetermined state for up to 100 blocks before it either probationally succeeds or truly fails. If it probationally succeeds another 100 blocks have to pass before it's accepted. This approach leads to quick acceptance most of the time, and a reasonable delay the remainder of the time, so it demonstrates that performant conservative reorg-safe behavior is possible.
+
+In addition to the semantic behavior a simple and efficient implementation is necessary. What is needed is some way for the receiving side to get not only the transaction ancestry but proofs of when those transactions were committed. Because blocks contain Merkle roots of new transactions, compact versions of such proofs can be verified by SPV clients, who keep a record of all blocks. An extension to SPV can be made so that when a node sends a committed transaction it can optionally at the client's request send the block and location within the merkle tree of that block of all of the inputs. Such an extension would add only modest storage requirements to a full node, and can be implemented very efficiently and without lots of extra memory overhead by keeping in memory only the immediate ancestor information of the current utxo set, storing that verbatim when blocks get committed, and using the location to look up the exact information being requested as clients trace the history.
+
+WRITEME Discuss block height versus hash to identify blocks, and the meaning of 'location', whether its path in the merkle tree or an absolute position, and globally consistent or particular to the node. Also maybe include a fleshed out extension proposal to SPV as part of this BIP?
+
+Backwards Compatibility
+
+This extension is dependent on segregated witness, and is a soft fork on top of that.
+
+WRITEME SPV extension? Should be backwards compatible and use up some opcodes.
+
+Reference Implementation
+
+WRITEME
